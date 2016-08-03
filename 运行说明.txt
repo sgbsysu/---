@@ -1,0 +1,43 @@
+stage1: 对原始数据直接进行缺失值填充（使用均值填充），然后直接用svm和xgboost进行训练；
+stage2: 
+	preProcess.py
+	运行说明：需要在源代码里，添加调用所要运行的操作，然后在终端直接输入：python preProcess.py即可
+	1. 首先对原始数据进行预处理：将每一样本的缺失值数量作为一维新的特征；
+        2. 根据样本缺失值可视化的结果，将其划分为5个区间，便于后续处理中，去除噪声数据；
+	3. 同时，统计每个属性的缺失值数量，并可视化；
+	4. 根据可视化结果，将缺失值超过一定阈值的特征属性去除，减少噪声的影响。
+	
+	featureEnginee.py
+	运行说明：同preProcess.py
+	1. 在原始数据基础上，将其划分为numeric和category数据；
+	2. 在numeric数据上，对其进行rank排序，获得排序特征；
+	3. 在排序特征的基础上，对其进行离散化处理，划分为10个区间，得到离散化特征；
+	4. 在离散特征基础上，对其进行计数，统计每种类别出现的次数；
+	5. 对category数据，将其转换为int型；
+	6. 对缺失值进行均值填充。
+	
+	featureSelect.py,featureSelect_discrete.py,featureSelect_rank.py
+	运行说明：直接运行 python 文件名
+	功能说明：利用xgboost对特征进行重要性排序
+
+	svm_rankdata.py,xgboost_rank.py
+	运行说明: 直接运行
+	功能说明：利用排序特征进行训练和预测
+	
+	svmM1.py
+	运行说明：直接运行
+	功能说明：利用svm对排序特征进行多轮训练
+	
+	xgboostM1.py，predictBySVM.py
+	运行说明：直接运行，注意在运行predictBySVM.py之前，需要在xgboostM1.py中修改第86和109行代码，并运行
+	功能说明：根据特征重要性排序后的结果，各选取前50%的特征进行组合，然后利用xgboost进行训练
+	
+	xgboostM2.py
+	运行说明：直接运行
+	功能说明：利用xgboost进行对此迭代
+	
+stage3: avg_svm_xgb.py
+	运行说明：直接运行
+	功能说明：对stage2运行较好的结果进行加权平均
+	
+	

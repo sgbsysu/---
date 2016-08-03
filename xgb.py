@@ -1,0 +1,96 @@
+# -*- coding: utf-8 -*-
+
+from sklearn.cross_validation import train_test_split
+import pandas as pd
+import xgboost as xgb
+
+random_seed = 1220
+
+# set data path
+train_x_csv = "../data/train_x.csv"
+train_y_csv = "../data/train_y.csv"
+test_x_csv = "../data/test_x.csv"
+features_type_csv = "../data/features_type.csv"
+
+# load data
+train_x = pd.read_csv(train_x_csv)
+train_y = pd.read_csv(train_y_csv)
+train_xy = pd.merge(train_x, train_y, on = "uid")
+
+test = pd.read_csv(test_x_csv)
+test_uid = test.uid
+test_x = test.drop(["uid"], axis = 1)
+
+# dictionary {feature:type}
+features_type = pd.read_csv(features_type_csv)
+features_type.index = features_type.feature
+features_type = features_type.drop("feature", axis = 1)
+features_type = features_type.to_dict()["type"]
+
+feature_info = {}
+features = list(train_x.columns)
+
+features.remove("uid")
+
+for feature in features:
+    max = train_x[feature].max()
+    min = train_x[feature].min()
+    n_null = len(train_x[train_x[feature] < 0]) # number of null
+    n_gt1w = len(train_x[train_x[feature] > 10000]) # greater than 10000
+    feature_info[feature] = [min, max, n_null, n_gt1w]
+
+# see how many neg/pos sample
+print("neg:{0},pos:{1}".format(len(train_xy[train_xy.y == 0]), len(train_xy[train_xy.y == 1])))
+
+# split train set, generate train, val, test set
+train_xy = train_xy.drop(["uid"], axis = 1)
+train, val = train_test_split(train_xy, test_size = 0.2, random_state = random_seed)
+y = train.y
+x = train.drop(["y"], axis = 1)
+val_y = val.y
+val_x = val.drop(["y"], axis = 1)
+
+# xgboost start here
+dtest = xgb.DMatrix(test_x)
+dval = xgb.DMatrix(val_x, label = val_y)
+dtrain = xgb.DMatrix(x, label = y)
+params = {
+    "booster": "gbtree",
+    "objective": "binary:logistic",
+    "early_stopping_rounds": 100,
+    "scale_pos_weight": 0.13,
+    "eval_metric": "auc",
+    "gamma": 0.1,
+    "max_depth": 8,
+    "lambda": 550,
+    "subsample": 0.7,
+    "colsample_bytree": 0.4,
+    "min_child_weight": 3,
+    "eta": 0.02,
+    "seed": 1220
+    }
+
+watchlist = [(dtrain, "train"), (dval, "val")]
+model = xgb.train(params, dtrain, num_boost_round = 8000, evals = watchlist)
+model.save_model("../model/xgb.model")
+
+# predict test set (from the best iteration)
+test_y = model.predict(dtest, ntree_limit = model.best_ntree_limit)
+test_result = pd.DataFrame(columns = ["uid", "score"])
+test_result.uid = test_uid
+test_result.score = test_y
+test_result.to_csv("xgb.csv", index = None, encoding = "utf-8") # remember to edit xgb.csv, add""
+
+# save feature score and feature information: feature, score, min, max, n_null, n_gt1w
+feature_score = model.get_fscore()
+for key in feature_score:
+    feature_score[key] = [feature_score[key]] + feature_info[key] + [features_type[key]]
+
+feature_score = sorted(feature_score.items(), key = lambda x:x[1], reverse = True)
+fs = []
+for (key, value) in feature_score:
+    fs.append("{0}, {1}, {2}, {3}, {4}, {5}, {6}\n".format(key, value[0], value[1], value[2], value[3], value[4], value[5]))
+
+with open("feature_score.csv", "w") as f:
+    f.writelines("feature, score, min, max, n_null, n_gt1w\n")
+    f.writelines(fs)
